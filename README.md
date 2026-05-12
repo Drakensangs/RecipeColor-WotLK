@@ -2,8 +2,8 @@
 
 World of Warcraft Wrath of the Lich King 3.3.5a addon that colors known recipes green in the bag, bank, mailbox, inbox, trade, loot and merchant frames.
 
-<img width="265" height="242" alt="recipecolorbag" src="https://github.com/user-attachments/assets/1af72383-6b41-4d2d-a993-87f41dbd035c" />
-<img width="267" height="366" alt="recipecolorloot" src="https://github.com/user-attachments/assets/9a4c550b-5da1-46d8-a6b5-bed9be32bab3" />
+<img width="265" height="242" alt="recipecolorbag" src="https://github.com/user-attachments/assets/1af72383-6b41-4d2d-a993-87f41dbd035c" />\
+<img width="267" height="366" alt="recipecolorloot" src="https://github.com/user-attachments/assets/9a4c550b-5da1-46d8-a6b5-bed9be32bab3" />\
 <img width="477" height="546" alt="recipecolortrade" src="https://github.com/user-attachments/assets/8ca60aee-b7ab-4299-ad73-e0bcf0907426" />
 <img width="1033" height="665" alt="recipecolormail" src="https://github.com/user-attachments/assets/1a6abc04-9df7-4fbc-84c8-934a328ee56e" />
 
@@ -23,6 +23,7 @@ RecipeColor will detect and color known recipes on frames from the following add
 
 \
 **Baggins**
+
 <img width="290" height="263" alt="recipecolorscompatibilitybaggins" src="https://github.com/user-attachments/assets/fca7dc4a-e409-4fbd-95f9-4760fc8e6d05" />
 
 \
