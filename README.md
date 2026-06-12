@@ -37,7 +37,7 @@ RecipeColor will detect and color known recipes on frames from the following add
 <img width="399" height="317" alt="recipecolorscompatibilitydragonui" src="https://github.com/user-attachments/assets/8c7242fb-3daa-40f8-b364-3a55d0ee4d62" />
 
 \
-**ElvUI**
+**ElvUI** versions [**6.09**](https://github.com/ElvUI-WotLK/ElvUI) & [**7**](https://github.com/Crumdidlyumshis/ElvUI)
 
 <img width="337" height="253" alt="recipecolorscompatibilityelvui" src="https://github.com/user-attachments/assets/244e5411-b8e0-4455-8792-f8b255ff6e43" />
 <img width="341" height="175" alt="recipecolorscompatibilityelvuiloot" src="https://github.com/user-attachments/assets/ffa1d2b7-3dce-49c6-ae85-3b79d38161f7" />
