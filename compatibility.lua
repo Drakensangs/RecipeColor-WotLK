@@ -34,6 +34,8 @@ function RecipeColor.InitCompat(isKnownRecipeFn, getFromLinkFn, hookGlobalFn, is
 	isDragonUICombuctor = IsAddOnLoaded("DragonUI")
 
 	-- ElvUI
+	-- Supports both ElvUI 6.09 (uses B.UpdateItemLock / B.SetSearch) and
+	-- ElvUI 7 (uses B.UpdateCooldown / B.SetItemSearch; no B.UpdateItemLock).
 	if isElvUI then
 		local elvUIHookTicker = CreateFrame("Frame")
 		elvUIHookTicker:SetScript("OnUpdate", function(self)
@@ -43,6 +45,62 @@ function RecipeColor.InitCompat(isKnownRecipeFn, getFromLinkFn, hookGlobalFn, is
 
 			self:SetScript("OnUpdate", nil)
 
+			local elvMajor = E.version and math.floor(E.version) or 6
+
+			local function ProcessElvUISlot(slot, bagID, slotID)
+				if not slot then return end
+
+				local key  = bagID .. ":" .. slotID
+				local link = GetContainerItemLink(bagID, slotID)
+
+				if not slot.hasItem or not link or not IsRecipeItem(link) then
+					if slot.rcKnownRecipe ~= nil or slot.rcLink ~= nil then
+						slot.rcKnownRecipe = nil
+						slot.rcLink        = nil
+						if RecipeColor.knownRecipeSlots
+								and RecipeColor.knownRecipeSlots[key] then
+							RecipeColor.knownRecipeSlots[key] = nil
+							RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount - 1
+						end
+					end
+					return
+				end
+
+				if link == slot.rcLink then
+					if slot.rcKnownRecipe then
+						local start, duration, enable = GetContainerItemCooldown(bagID, slotID)
+						if not (duration > 0 and enable == 0) then
+							SetItemButtonTextureVertexColor(slot, 0, 1, 0)
+						end
+					end
+					return
+				end
+
+				slot.rcLink = link
+				local start, duration, enable = GetContainerItemCooldown(bagID, slotID)
+				if duration > 0 and enable == 0 then
+					slot.rcKnownRecipe = nil
+					return
+				end
+
+				if IsKnownRecipe(bagID, slotID) then
+					slot.rcKnownRecipe = true
+					SetItemButtonTextureVertexColor(slot, 0, 1, 0)
+					if RecipeColor.knownRecipeSlots
+							and not RecipeColor.knownRecipeSlots[key] then
+						RecipeColor.knownRecipeSlots[key] = true
+						RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount + 1
+					end
+				else
+					slot.rcKnownRecipe = nil
+					if RecipeColor.knownRecipeSlots
+							and RecipeColor.knownRecipeSlots[key] then
+						RecipeColor.knownRecipeSlots[key] = nil
+						RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount - 1
+					end
+				end
+			end
+
 			if B.UpdateSlot then
 				local origUpdateSlot = B.UpdateSlot
 				B.UpdateSlot = function(bself, frame, bagID, slotID)
@@ -50,61 +108,11 @@ function RecipeColor.InitCompat(isKnownRecipeFn, getFromLinkFn, hookGlobalFn, is
 					local slot = frame and frame.Bags
 						and frame.Bags[bagID]
 						and frame.Bags[bagID][slotID]
-					if not slot then return end
-
-					local key = bagID .. ":" .. slotID
-					local link = GetContainerItemLink(bagID, slotID)
-
-					if not slot.hasItem or not link or not IsRecipeItem(link) then
-						if slot.rcKnownRecipe ~= nil or slot.rcLink ~= nil then
-							slot.rcKnownRecipe = nil
-							slot.rcLink = nil
-							if RecipeColor.knownRecipeSlots
-									and RecipeColor.knownRecipeSlots[key] then
-								RecipeColor.knownRecipeSlots[key] = nil
-								RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount - 1
-							end
-						end
-						return
-					end
-
-					if link == slot.rcLink then
-						if slot.rcKnownRecipe then
-							local start, duration, enable = GetContainerItemCooldown(bagID, slotID)
-							if not (duration > 0 and enable == 0) then
-								SetItemButtonTextureVertexColor(slot, 0, 1, 0)
-							end
-						end
-						return
-					end
-
-					slot.rcLink = link
-					local start, duration, enable = GetContainerItemCooldown(bagID, slotID)
-					if duration > 0 and enable == 0 then
-						slot.rcKnownRecipe = nil
-						return
-					end
-
-					if IsKnownRecipe(bagID, slotID) then
-						slot.rcKnownRecipe = true
-						SetItemButtonTextureVertexColor(slot, 0, 1, 0)
-						if RecipeColor.knownRecipeSlots
-								and not RecipeColor.knownRecipeSlots[key] then
-							RecipeColor.knownRecipeSlots[key] = true
-							RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount + 1
-						end
-					else
-						slot.rcKnownRecipe = nil
-						if RecipeColor.knownRecipeSlots
-								and RecipeColor.knownRecipeSlots[key] then
-							RecipeColor.knownRecipeSlots[key] = nil
-							RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount - 1
-						end
-					end
+					ProcessElvUISlot(slot, bagID, slotID)
 				end
 			end
 
-			if B.UpdateItemLock then
+			if elvMajor < 7 and B.UpdateItemLock then
 				local origUpdateItemLock = B.UpdateItemLock
 				B.UpdateItemLock = function(bself, frame, bagID, slotID)
 					origUpdateItemLock(bself, frame, bagID, slotID)
@@ -119,9 +127,25 @@ function RecipeColor.InitCompat(isKnownRecipeFn, getFromLinkFn, hookGlobalFn, is
 				end
 			end
 
-			if B.SetSearch then
-				local origSetSearch = B.SetSearch
-				B.SetSearch = function(bself, query)
+			if elvMajor >= 7 and B.UpdateCooldown then
+				local origUpdateCooldown = B.UpdateCooldown
+				B.UpdateCooldown = function(bself, slot)
+					origUpdateCooldown(bself, slot)
+					if not slot or not slot.rcKnownRecipe or not slot.hasItem then return end
+					local bagID  = slot.BagID
+					local slotID = slot.SlotID
+					if not bagID or not slotID then return end
+					local start, duration, enable = GetContainerItemCooldown(bagID, slotID)
+					if not (duration > 0 and enable == 0) then
+						SetItemButtonTextureVertexColor(slot, 0, 1, 0)
+					end
+				end
+			end
+
+			local searchMethodName = (elvMajor >= 7) and "SetItemSearch" or "SetSearch"
+			if B[searchMethodName] then
+				local origSetSearch = B[searchMethodName]
+				B[searchMethodName] = function(bself, query)
 					origSetSearch(bself, query)
 					for _, bagFrame in pairs(B.BagFrames) do
 						if bagFrame:IsShown() then
