@@ -304,7 +304,7 @@ function RecipeColor:ColorKnownRecipesAtMerchant()
 		local index = ((MerchantFrame.page - 1) * MERCHANT_ITEMS_PER_PAGE) + i
 		if index <= numMerchantItems then
 			if IsKnownRecipe("Merchant", index) then
-				local itemButton     = _G["MerchantItem" .. i .. "ItemButton"]
+				local itemButton	 = _G["MerchantItem" .. i .. "ItemButton"]
 				local merchantButton = _G["MerchantItem" .. i]
 				SetItemButtonNameFrameVertexColor(merchantButton, 0, 1, 0)
 				SetItemButtonSlotVertexColor(merchantButton, 0, 1, 0)
@@ -317,7 +317,7 @@ end
 
 local BUYBACK_ITEMS_PER_PAGE_RC = 12
 local rcGreenBuybackButtons = {}
-local rcGreenBuybackSlot    = false
+local rcGreenBuybackSlot	= false
 
 function RecipeColor:ColorKnownRecipesInBuybackTab()
 	if not MerchantFrame:IsVisible() then return end
@@ -327,7 +327,7 @@ function RecipeColor:ColorKnownRecipesInBuybackTab()
 	rcGreenBuybackButtons = {}
 	local numBuyback = GetNumBuybackItems()
 	for i = 1, BUYBACK_ITEMS_PER_PAGE_RC do
-		local itemButton     = _G["MerchantItem" .. i .. "ItemButton"]
+		local itemButton	 = _G["MerchantItem" .. i .. "ItemButton"]
 		local merchantButton = _G["MerchantItem" .. i]
 		if itemButton and i <= numBuyback and GetBuybackItemInfo(i) and IsKnownRecipe("Buyback", i) then
 			SetItemButtonNameFrameVertexColor(merchantButton, 0, 1, 0)

@@ -5,33 +5,35 @@ local GetFromLink
 local HookGlobal
 local IsRecipeItem
 
-local isBagnon          = false
+local isBagnon			= false
 local isBagnonGuildBank = false
-local isOneBag    = false
+local isOneBag	  = false
 local isSUCCbag   = false
-local isAdiBags      = false
+local isAdiBags		 = false
 local isArkInventory = false
-local isBaggins      = false
+local isBaggins		 = false
 local isExtVendor = false
-local isElvUI     = false
+local isElvUI	  = false
 local isGudaBags  = false
 local isDragonUICombuctor = false
+local isRaidThreeBags	  = false
 
 function RecipeColor.InitCompat(isKnownRecipeFn, getFromLinkFn, hookGlobalFn, isRecipeItemFn)
 	IsKnownRecipe = isKnownRecipeFn
 	GetFromLink   = getFromLinkFn
-	HookGlobal    = hookGlobalFn
+	HookGlobal	  = hookGlobalFn
 	IsRecipeItem  = isRecipeItemFn
 
-	isBagnon     = IsAddOnLoaded("Bagnon")
-	isOneBag     = (OneCore ~= nil) or IsAddOnLoaded("OneBag3")
-	isAdiBags      = IsAddOnLoaded("AdiBags")
+	isBagnon	 = IsAddOnLoaded("Bagnon")
+	isOneBag	 = (OneCore ~= nil) or IsAddOnLoaded("OneBag3")
+	isAdiBags	   = IsAddOnLoaded("AdiBags")
 	isArkInventory = IsAddOnLoaded("ArkInventory")
-	isBaggins      = IsAddOnLoaded("Baggins")
+	isBaggins	   = IsAddOnLoaded("Baggins")
 	isExtVendor  = IsAddOnLoaded("ExtVendor")
-	isElvUI      = IsAddOnLoaded("ElvUI")
-	isGudaBags   = IsAddOnLoaded("GudaBags")
+	isElvUI		 = IsAddOnLoaded("ElvUI")
+	isGudaBags	 = IsAddOnLoaded("GudaBags")
 	isDragonUICombuctor = IsAddOnLoaded("DragonUI")
+	isRaidThreeBags		= IsAddOnLoaded("RaidThreeBags")
 
 	-- ElvUI
 	-- Supports both ElvUI 6.09 (uses B.UpdateItemLock / B.SetSearch) and
@@ -56,7 +58,7 @@ function RecipeColor.InitCompat(isKnownRecipeFn, getFromLinkFn, hookGlobalFn, is
 				if not slot.hasItem or not link or not IsRecipeItem(link) then
 					if slot.rcKnownRecipe ~= nil or slot.rcLink ~= nil then
 						slot.rcKnownRecipe = nil
-						slot.rcLink        = nil
+						slot.rcLink		   = nil
 						if RecipeColor.knownRecipeSlots
 								and RecipeColor.knownRecipeSlots[key] then
 							RecipeColor.knownRecipeSlots[key] = nil
@@ -958,6 +960,156 @@ function RecipeColor.InitCompat(isKnownRecipeFn, getFromLinkFn, hookGlobalFn, is
 		combuctorHookTicker:Show()
 		RecipeColor.DragonUICombuctorTicker = combuctorHookTicker
 	end
+
+	-- RaidThreeBags
+	if isRaidThreeBags then
+		local rtbHookTicker = CreateFrame("Frame")
+		rtbHookTicker:SetScript("OnUpdate", function(self)
+			local RTB = RaidThreeBags
+			-- Wait until RTB has built its UI.
+			if not (RTB and RTB.UpdateItemButton) then return end
+
+			self:SetScript("OnUpdate", nil)
+
+			-- Inventory
+			local origUpdateItemButton = RTB.UpdateItemButton
+			RTB.UpdateItemButton = function(rtb, button, bagID, slotID)
+				origUpdateItemButton(rtb, button, bagID, slotID)
+
+				-- Empty slot
+				if not button.hasItem then
+					button.rcKnownRecipe = nil
+					button.rcLink = nil
+					return
+				end
+
+				local link = GetContainerItemLink(bagID, slotID)
+				if not link or not IsRecipeItem(link) then
+					button.rcKnownRecipe = nil
+					button.rcLink = nil
+					return
+				end
+
+				if link == button.rcLink then
+					-- Same item as last paint, re-apply from cache, no tooltip scan.
+					if button.rcKnownRecipe then
+						local start, duration, enable = GetContainerItemCooldown(bagID, slotID)
+						if not (duration > 0 and enable == 0) then
+							SetItemButtonTextureVertexColor(button, 0, 1, 0)
+						end
+					end
+					return
+				end
+
+				-- Item changed, run tooltip scan and update cache.
+				button.rcLink = link
+				local start, duration, enable = GetContainerItemCooldown(bagID, slotID)
+				if duration > 0 and enable == 0 then
+					button.rcKnownRecipe = nil
+					return
+				end
+
+				local key = bagID .. ":" .. slotID
+				if IsKnownRecipe(bagID, slotID) then
+					button.rcKnownRecipe = true
+					SetItemButtonTextureVertexColor(button, 0, 1, 0)
+					if RecipeColor.knownRecipeSlots
+							and not RecipeColor.knownRecipeSlots[key] then
+						RecipeColor.knownRecipeSlots[key] = true
+						RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount + 1
+					end
+				else
+					button.rcKnownRecipe = nil
+					if RecipeColor.knownRecipeSlots
+							and RecipeColor.knownRecipeSlots[key] then
+						RecipeColor.knownRecipeSlots[key] = nil
+						RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount - 1
+					end
+				end
+			end
+
+			-- Bank
+			if RTB.UpdateBankItemButton then
+				local origUpdateBankItemButton = RTB.UpdateBankItemButton
+				RTB.UpdateBankItemButton = function(rtb, button, bagID, slotID)
+					origUpdateBankItemButton(rtb, button, bagID, slotID)
+
+					if not button.hasItem then
+						button.rcKnownRecipe = nil
+						button.rcLink = nil
+						return
+					end
+
+					local link = GetContainerItemLink(bagID, slotID)
+					if not link or not IsRecipeItem(link) then
+						button.rcKnownRecipe = nil
+						button.rcLink = nil
+						return
+					end
+
+					if link == button.rcLink then
+						if button.rcKnownRecipe then
+							local start, duration, enable = GetContainerItemCooldown(bagID, slotID)
+							if not (duration > 0 and enable == 0) then
+								SetItemButtonTextureVertexColor(button, 0, 1, 0)
+							end
+						end
+						return
+					end
+
+					button.rcLink = link
+					local start, duration, enable = GetContainerItemCooldown(bagID, slotID)
+					if duration > 0 and enable == 0 then
+						button.rcKnownRecipe = nil
+						return
+					end
+
+					if IsKnownRecipe(bagID, slotID) then
+						button.rcKnownRecipe = true
+						SetItemButtonTextureVertexColor(button, 0, 1, 0)
+					else
+						button.rcKnownRecipe = nil
+					end
+				end
+			end
+
+			-- learnTicker: refresh after a recipe is learned
+			-- Invalidate all rcLink caches so the next UpdateItemButton/
+			-- UpdateBankItemButton re-runs IsKnownRecipe, then repaint all visible
+			-- slots by calling the normal full-refresh paths.
+			local learnTicker = RecipeColor.learnTicker
+			if learnTicker then
+				local origLearnOnUpdate = learnTicker:GetScript("OnUpdate")
+				learnTicker:SetScript("OnUpdate", function(self)
+					if origLearnOnUpdate then origLearnOnUpdate(self) end
+
+					-- Invalidate inventory link caches.
+					if RTB.ItemButtons then
+						local i
+						for i = 1, #RTB.ItemButtons do
+							RTB.ItemButtons[i].rcLink = nil
+						end
+					end
+					if RTB.MainFrame and RTB.MainFrame:IsShown() then
+						RTB:RefreshItems()
+					end
+
+					-- Invalidate bank link caches.
+					if RTB.BankItemButtons then
+						local i
+						for i = 1, #RTB.BankItemButtons do
+							RTB.BankItemButtons[i].rcLink = nil
+						end
+					end
+					if RTB.PlayerBankFrame and RTB.PlayerBankFrame:IsShown() then
+						RTB:RefreshBankItems()
+					end
+				end)
+			end
+		end)
+		rtbHookTicker:Show()
+		RecipeColor.RaidThreeBagsTicker = rtbHookTicker
+	end
 end
 
 -- Deferred event handler for compat addons. Called from RecipeColor_OnEvent.
@@ -1185,6 +1337,19 @@ function RecipeColor.OnCompatEvent(rcFrame, event, arg1)
 					break
 				end
 				frameIdx = frameIdx + 1
+			end
+		end
+	end
+
+	-- RaidThreeBags
+	if event == "UNIT_SPELLCAST_SUCCEEDED" and arg1 == "player" and isRaidThreeBags then
+		local learnTicker = RecipeColor.learnTicker
+		if learnTicker and RecipeColor.knownRecipeCount > 0 then
+			local RTB = RaidThreeBags
+			local invShown  = RTB and RTB.MainFrame and RTB.MainFrame:IsShown()
+			local bankShown = RTB and RTB.PlayerBankFrame and RTB.PlayerBankFrame:IsShown()
+			if invShown or bankShown then
+				learnTicker:Show()
 			end
 		end
 	end
