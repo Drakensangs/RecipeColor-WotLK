@@ -58,6 +58,11 @@ RecipeColor will detect and color known recipes on frames from the following add
 <img width="954" height="272" alt="recipecolorscompatibilityonebag3onebank3" src="https://github.com/user-attachments/assets/3bb07742-74b8-4030-9f04-b8424c644c58" />
 
 \
+**RaidThreeBags**
+
+<img width="1116" height="366" alt="rcrtb" src="https://github.com/user-attachments/assets/c15f1035-9cee-4212-a2ce-d3e94c551b88" />
+
+\
 **SUCC-bag**
 
 <img width="405" height="263" alt="recipecolorscompatibilitysuccbag" src="https://github.com/user-attachments/assets/93697814-cb37-4c15-a2b2-ca81541ea886" />
