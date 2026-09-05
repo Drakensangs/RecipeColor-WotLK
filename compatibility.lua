@@ -7,16 +7,18 @@ local IsRecipeItem
 
 local isBagnon			= false
 local isBagnonGuildBank = false
-local isOneBag	  = false
-local isSUCCbag   = false
-local isAdiBags		 = false
-local isArkInventory = false
-local isBaggins		 = false
-local isExtVendor = false
-local isElvUI	  = false
-local isGudaBags  = false
-local isDragonUICombuctor = false
-local isRaidThreeBags	  = false
+local isOneBag			= false
+local isSUCCbag			= false
+local isAdiBags			= false
+local isArkInventory	= false
+local isBaggins			= false
+local isExtVendor		= false
+local isElvUI			= false
+local isGudaBags		= false
+local isBagster			= false
+local isDragonUIBags	= false
+local isRaidThreeBags	= false
+local isNewEraBags		= false
 
 function RecipeColor.InitCompat(isKnownRecipeFn, getFromLinkFn, hookGlobalFn, isRecipeItemFn)
 	IsKnownRecipe = isKnownRecipeFn
@@ -24,16 +26,18 @@ function RecipeColor.InitCompat(isKnownRecipeFn, getFromLinkFn, hookGlobalFn, is
 	HookGlobal	  = hookGlobalFn
 	IsRecipeItem  = isRecipeItemFn
 
-	isBagnon	 = IsAddOnLoaded("Bagnon")
-	isOneBag	 = (OneCore ~= nil) or IsAddOnLoaded("OneBag3")
-	isAdiBags	   = IsAddOnLoaded("AdiBags")
-	isArkInventory = IsAddOnLoaded("ArkInventory")
-	isBaggins	   = IsAddOnLoaded("Baggins")
-	isExtVendor  = IsAddOnLoaded("ExtVendor")
-	isElvUI		 = IsAddOnLoaded("ElvUI")
-	isGudaBags	 = IsAddOnLoaded("GudaBags")
-	isDragonUICombuctor = IsAddOnLoaded("DragonUI")
-	isRaidThreeBags		= IsAddOnLoaded("RaidThreeBags")
+	isBagnon		= IsAddOnLoaded("Bagnon")
+	isOneBag		= (OneCore ~= nil) or IsAddOnLoaded("OneBag3")
+	isAdiBags		= IsAddOnLoaded("AdiBags")
+	isArkInventory	= IsAddOnLoaded("ArkInventory")
+	isBaggins		= IsAddOnLoaded("Baggins")
+	isExtVendor		= IsAddOnLoaded("ExtVendor")
+	isElvUI			= IsAddOnLoaded("ElvUI")
+	isGudaBags		= IsAddOnLoaded("GudaBags")
+	isBagster		= IsAddOnLoaded("DragonUI")
+	isDragonUIBags	= IsAddOnLoaded("DragonUI")
+	isRaidThreeBags	= IsAddOnLoaded("RaidThreeBags")
+	isNewEraBags	= IsAddOnLoaded("DragonUI_NewEra")
 
 	-- ElvUI
 	-- Supports both ElvUI 6.09 (uses B.UpdateItemLock / B.SetSearch) and
@@ -176,15 +180,27 @@ function RecipeColor.InitCompat(isKnownRecipeFn, getFromLinkFn, hookGlobalFn, is
 					if origLearnOnUpdate then origLearnOnUpdate(self) end
 					for _, bagFrame in pairs(B.BagFrames) do
 						if bagFrame:IsShown() then
-							if RecipeColor.knownRecipeSlots then
-								for key in pairs(RecipeColor.knownRecipeSlots) do
-									local bagID, slotID = key:match("^(-?%d+):(%d+)$")
-									bagID, slotID = tonumber(bagID), tonumber(slotID)
-									local slot = bagID and slotID
-										and bagFrame.Bags
-										and bagFrame.Bags[bagID]
-										and bagFrame.Bags[bagID][slotID]
-									if slot then slot.rcLink = nil end
+							if elvMajor < 7 then
+								for _, bagID in ipairs(bagFrame.BagIDs) do
+									local bag = bagFrame.Bags and bagFrame.Bags[bagID]
+									if bag then
+										for slotID = 1, GetContainerNumSlots(bagID) do
+											local slot = bag[slotID]
+											if slot then slot.rcLink = nil end
+										end
+									end
+								end
+							else
+								if RecipeColor.knownRecipeSlots then
+									for key in pairs(RecipeColor.knownRecipeSlots) do
+										local bagID, slotID = key:match("^(-?%d+):(%d+)$")
+										bagID, slotID = tonumber(bagID), tonumber(slotID)
+										local slot = bagID and slotID
+											and bagFrame.Bags
+											and bagFrame.Bags[bagID]
+											and bagFrame.Bags[bagID][slotID]
+										if slot then slot.rcLink = nil end
+									end
 								end
 							end
 							B:UpdateAllSlots(bagFrame)
@@ -388,14 +404,41 @@ function RecipeColor.InitCompat(isKnownRecipeFn, getFromLinkFn, hookGlobalFn, is
 			end
 
 			-- Hook UpdateItemLock: called per-slot on ITEM_LOCK_CHANGED.
-			-- SetItemButtonDesaturated resets vertex color; re-apply from cache.
 			local origUpdateItemLock = addon.UpdateItemLock
 			addon.UpdateItemLock = function(self, event, bagid, slotid)
 				origUpdateItemLock(self, event, bagid, slotid)
-				if not self.frame or not self.frame.slots then return end
-				local slot = self:GetSlot(bagid, slotid)
-				if slot and slot.rcKnownRecipe and slot.rcIcon then
-					slot.rcIcon:SetVertexColor(0, 1, 0)
+				if not bagid or not slotid then return end
+				if not self.frame or not self.frame.bags then return end
+				local bagFrame = self.frame.bags[bagid]
+				if not bagFrame then return end
+				local key = bagid .. ":" .. slotid
+				local _, _, locked = GetContainerItemInfo(bagid, slotid)
+				if locked then
+					if RecipeColor.knownRecipeSlots and RecipeColor.knownRecipeSlots[key] then
+						RecipeColor.knownRecipeSlots[key] = nil
+						RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount - 1
+						if not bagFrame._rcSavedSlots then bagFrame._rcSavedSlots = {} end
+						bagFrame._rcSavedSlots[slotid] = true
+					end
+				else
+					local saved = bagFrame._rcSavedSlots and bagFrame._rcSavedSlots[slotid]
+					if bagFrame._rcSavedSlots then bagFrame._rcSavedSlots[slotid] = nil end
+					local key_known = RecipeColor.knownRecipeSlots and RecipeColor.knownRecipeSlots[key]
+					local itemButton = bagFrame.slots and bagFrame.slots[slotid]
+					if key_known then
+						if itemButton then
+							SetItemButtonTextureVertexColor(itemButton, 0, 1, 0)
+						end
+					elseif saved then
+						local link = GetContainerItemLink(bagid, slotid)
+						if link and IsRecipeItem(link) and IsKnownRecipe(bagid, slotid) then
+							if itemButton then
+								SetItemButtonTextureVertexColor(itemButton, 0, 1, 0)
+							end
+							RecipeColor.knownRecipeSlots[key] = true
+							RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount + 1
+						end
+					end
 				end
 			end
 		end
@@ -829,107 +872,48 @@ function RecipeColor.InitCompat(isKnownRecipeFn, getFromLinkFn, hookGlobalFn, is
 		end
 	end
 
-	-- DragonUI
-	if isDragonUICombuctor then
-		local combuctorHookTicker = CreateFrame("Frame")
-		combuctorHookTicker:SetScript("OnUpdate", function(self)
-			local firstItem = _G["DragonUI_CombuctorItem1"]
+	-- DragonUI Bagster
+	if isBagster then
+		local bagsterHookTicker = CreateFrame("Frame")
+		bagsterHookTicker:SetScript("OnUpdate", function(self)
+			local firstItem = _G["DragonUI_BagsterItem1"]
 			if not firstItem then return end
 
 			local proto = getmetatable(firstItem) and getmetatable(firstItem).__index
-			if not (proto and proto.Update and proto.UpdateLocked and proto.UpdateCooldown) then
-				return
-			end
+			if not (proto and proto.UpdateSlotColor) then return end
 
 			self:SetScript("OnUpdate", nil)
 
-			local origUpdate = proto.Update
-			proto.Update = function(slot)
-				origUpdate(slot)
+			local origUpdateSlotColor = proto.UpdateSlotColor
+			proto.UpdateSlotColor = function(slot)
+				origUpdateSlotColor(slot)
 				if not slot:IsVisible() then return end
+				if slot:IsCached() then return end
 
 				local bagID  = slot:GetBag()
 				local slotID = slot:GetID()
 				if not bagID then return end
 
 				local link = GetContainerItemLink(bagID, slotID)
-
-				if not slot.hasItem or not link or not IsRecipeItem(link) then
-					if slot.rcKnownRecipe ~= nil or slot.rcLink ~= nil then
-						local key = bagID .. ":" .. slotID
-						if RecipeColor.knownRecipeSlots
-								and RecipeColor.knownRecipeSlots[key] then
-							RecipeColor.knownRecipeSlots[key] = nil
-							RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount - 1
-						end
-						slot.rcKnownRecipe = nil
-						slot.rcLink = nil
-					end
+				if not link or not IsRecipeItem(link) then
+					slot.rcKnownRecipe = nil
+					slot.rcLink = nil
 					return
 				end
 
 				if link == slot.rcLink then
 					if slot.rcKnownRecipe then
-						local start, duration, enable = GetContainerItemCooldown(bagID, slotID)
-						if not (duration > 0 and enable == 0) then
-							SetItemButtonTextureVertexColor(slot, 0, 1, 0)
-						end
+						SetItemButtonTextureVertexColor(slot, 0, 1, 0)
 					end
 					return
 				end
 
 				slot.rcLink = link
-				local start, duration, enable = GetContainerItemCooldown(bagID, slotID)
-				if duration > 0 and enable == 0 then
-					-- On cooldown — grey tint takes priority; clear recipe cache.
-					slot.rcKnownRecipe = nil
-					return
-				end
-
-				local key = bagID .. ":" .. slotID
 				if IsKnownRecipe(bagID, slotID) then
 					slot.rcKnownRecipe = true
 					SetItemButtonTextureVertexColor(slot, 0, 1, 0)
-					if RecipeColor.knownRecipeSlots
-							and not RecipeColor.knownRecipeSlots[key] then
-						RecipeColor.knownRecipeSlots[key] = true
-						RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount + 1
-					end
 				else
 					slot.rcKnownRecipe = nil
-					if RecipeColor.knownRecipeSlots
-							and RecipeColor.knownRecipeSlots[key] then
-						RecipeColor.knownRecipeSlots[key] = nil
-						RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount - 1
-					end
-				end
-			end
-
-			local origUpdateLocked = proto.UpdateLocked
-			proto.UpdateLocked = function(slot)
-				origUpdateLocked(slot)
-				if slot.rcKnownRecipe and slot.hasItem then
-					local bagID  = slot:GetBag()
-					local slotID = slot:GetID()
-					if not bagID then return end
-					local start, duration, enable = GetContainerItemCooldown(bagID, slotID)
-					if not (duration > 0 and enable == 0) then
-						SetItemButtonTextureVertexColor(slot, 0, 1, 0)
-					end
-				end
-			end
-
-			local origUpdateCooldown = proto.UpdateCooldown
-			proto.UpdateCooldown = function(slot)
-				origUpdateCooldown(slot)
-				if slot.rcKnownRecipe and slot.hasItem then
-					local bagID  = slot:GetBag()
-					local slotID = slot:GetID()
-					if not bagID then return end
-					local start, duration, enable = GetContainerItemCooldown(bagID, slotID)
-					if not (duration > 0 and enable == 0) then
-						SetItemButtonTextureVertexColor(slot, 0, 1, 0)
-					end
 				end
 			end
 
@@ -940,14 +924,14 @@ function RecipeColor.InitCompat(isKnownRecipeFn, getFromLinkFn, hookGlobalFn, is
 					if origLearnOnUpdate then origLearnOnUpdate(self) end
 					local n = 1
 					while true do
-						local btn = _G["DragonUI_CombuctorItem" .. n]
+						local btn = _G["DragonUI_BagsterItem" .. n]
 						if not btn then break end
 						btn.rcLink = nil
 						n = n + 1
 					end
 					local frameIdx = 1
 					while true do
-						local frame = _G["DragonUI_CombuctorFrame" .. frameIdx]
+						local frame = _G["DragonUI_BagsterFrame" .. frameIdx]
 						if not frame then break end
 						if frame:IsShown() and frame.itemFrame then
 							frame.itemFrame:Regenerate()
@@ -957,8 +941,133 @@ function RecipeColor.InitCompat(isKnownRecipeFn, getFromLinkFn, hookGlobalFn, is
 				end)
 			end
 		end)
-		combuctorHookTicker:Show()
-		RecipeColor.DragonUICombuctorTicker = combuctorHookTicker
+		bagsterHookTicker:Show()
+		RecipeColor.BagsterTicker = bagsterHookTicker
+	end
+
+	-- DragonUI default bags
+	if isDragonUIBags then
+		local function ColorDragonUIBagButton(button, bagID, slotID)
+			if not button or not button:IsVisible() then return end
+			local link = GetContainerItemLink(bagID, slotID)
+			if not link or not IsRecipeItem(link) then
+				button.rcKnownRecipe = nil
+				button.rcLink = nil
+				return
+			end
+			if link == button.rcLink then
+				if button.rcKnownRecipe then
+					SetItemButtonTextureVertexColor(button, 0, 1, 0)
+				end
+				return
+			end
+			button.rcLink = link
+			if IsKnownRecipe(bagID, slotID) then
+				button.rcKnownRecipe = true
+				SetItemButtonTextureVertexColor(button, 0, 1, 0)
+			else
+				button.rcKnownRecipe = nil
+			end
+		end
+
+		local function ColorDragonUIContainerFrame(frame)
+			if not frame then return end
+			local bagID    = frame:GetID()
+			local frameName = frame:GetName()
+			local size = frame.size or GetContainerNumSlots(bagID)
+			for i = 1, size do
+				local button = _G[frameName .. "Item" .. i]
+				if button then
+					ColorDragonUIBagButton(button, bagID, button:GetID())
+				end
+			end
+		end
+
+		hooksecurefunc("ContainerFrame_Update", ColorDragonUIContainerFrame)
+		hooksecurefunc("ContainerFrame_UpdateLockedItem", function(frame, slot)
+			if not frame or not frame:IsShown() then return end
+			local size = frame.size
+			if not size or size == 0 then return end
+			local buttonIndex = size + 1 - slot
+			local button = _G[frame:GetName() .. "Item" .. buttonIndex]
+			if button and button.rcKnownRecipe then
+				SetItemButtonTextureVertexColor(button, 0, 1, 0)
+			end
+		end)
+
+		local learnTicker = RecipeColor.learnTicker
+		if learnTicker then
+			local origLearnOnUpdate = learnTicker:GetScript("OnUpdate")
+			learnTicker:SetScript("OnUpdate", function(self)
+				for i = 1, (NUM_CONTAINER_FRAMES or 13) do
+					local frame = _G["ContainerFrame" .. i]
+					if frame and frame:IsShown() then
+						local size = frame.size or GetContainerNumSlots(frame:GetID())
+						local frameName = frame:GetName()
+						for j = 1, size do
+							local button = _G[frameName .. "Item" .. j]
+							if button then button.rcLink = nil end
+						end
+					end
+				end
+				if origLearnOnUpdate then origLearnOnUpdate(self) end
+			end)
+		end
+	end
+
+	-- DragonUI New Era Bags
+	if isNewEraBags then
+		local newEraHookTicker = CreateFrame("Frame")
+		newEraHookTicker:SetScript("OnUpdate", function(self)
+			local NE = _G["DragonUI_NewEra"]
+			if not (NE and NE.bagskin and NE.bagskin.ApplyUsableTint) then return end
+
+			self:SetScript("OnUpdate", nil)
+
+			local origApplyUsableTint = NE.bagskin.ApplyUsableTint
+			NE.bagskin.ApplyUsableTint = function(btn, bagID, slot, enabled)
+				origApplyUsableTint(btn, bagID, slot, enabled)
+				if not btn or not btn:IsVisible() then return end
+				if not bagID or not slot then return end
+
+				local link = GetContainerItemLink(bagID, slot)
+				if not link or not IsRecipeItem(link) then
+					btn.rcKnownRecipe = nil
+					btn.rcLink = nil
+					return
+				end
+				if link == btn.rcLink then
+					if btn.rcKnownRecipe then
+						SetItemButtonTextureVertexColor(btn, 0, 1, 0)
+					end
+					return
+				end
+				btn.rcLink = link
+				if IsKnownRecipe(bagID, slot) then
+					btn.rcKnownRecipe = true
+					SetItemButtonTextureVertexColor(btn, 0, 1, 0)
+				else
+					btn.rcKnownRecipe = nil
+				end
+			end
+
+			local learnTicker = RecipeColor.learnTicker
+			if learnTicker then
+				local origLearnOnUpdate = learnTicker:GetScript("OnUpdate")
+				learnTicker:SetScript("OnUpdate", function(self)
+					if origLearnOnUpdate then origLearnOnUpdate(self) end
+					local CB = NE.combinedbag
+					if not CB then return end
+					local function nilRcLink(b) b.rcLink = nil end
+					if CB.grid and CB.grid.ForEachButton then
+						CB.grid:ForEachButton(nilRcLink)
+					end
+					if CB.Refresh then CB.Refresh() end
+				end)
+			end
+		end)
+		newEraHookTicker:Show()
+		RecipeColor.NewEraBagsTicker = newEraHookTicker
 	end
 
 	-- RaidThreeBags
@@ -1118,8 +1227,6 @@ function RecipeColor.OnCompatEvent(rcFrame, event, arg1)
 	if event == "ADDON_LOADED" and arg1 == "SUCC-bag" then
 		isSUCCbag = true
 
-		-- Helper: iterate all slots in one SUCC-bag frame and apply/clear green,
-		-- using the cache when the item link has not changed.
 		local function ColorSUCCFrame(frame)
 			if not frame or not frame:IsShown() or not frame.size or frame.size == 0 then
 				return
@@ -1139,12 +1246,10 @@ function RecipeColor.OnCompatEvent(rcFrame, event, arg1)
 							button.rcKnownRecipe = nil
 							button.rcLink = nil
 						elseif link == button.rcLink then
-							-- Same item as last paint — re-apply cached result, no tooltip scan.
 							if button.rcKnownRecipe then
 								SetItemButtonTextureVertexColor(button, 0, 1, 0)
 							end
 						else
-							-- Item changed — run tooltip scan and update cache.
 							button.rcLink = link
 							if IsKnownRecipe(bagID, slotID) then
 								button.rcKnownRecipe = true
@@ -1166,7 +1271,15 @@ function RecipeColor.OnCompatEvent(rcFrame, event, arg1)
 			for s = 1, frame.size do
 				local button = _G[frameName .. "Item" .. s]
 				if button and button.rcKnownRecipe then
-					SetItemButtonTextureVertexColor(button, 0, 1, 0)
+					local bagID  = button:GetParent():GetID()
+					local slotID = button:GetID()
+					local link   = GetContainerItemLink(bagID, slotID)
+					if link == button.rcLink then
+						SetItemButtonTextureVertexColor(button, 0, 1, 0)
+					else
+						button.rcKnownRecipe = nil
+						button.rcLink = nil
+					end
 				end
 			end
 		end
@@ -1196,6 +1309,24 @@ function RecipeColor.OnCompatEvent(rcFrame, event, arg1)
 			HookGlobal("SBFrameOpen", function(frame, automatic)
 				origOpen(frame, automatic)
 				ColorSUCCFrame(frame)
+			end)
+		end
+
+		local learnTicker = RecipeColor.learnTicker
+		if learnTicker then
+			local origLearnOnUpdate = learnTicker:GetScript("OnUpdate")
+			learnTicker:SetScript("OnUpdate", function(self)
+				local frames = {SUCC_bag, SUCC_bag.bank}
+				for _, frame in ipairs(frames) do
+					if frame and frame.size and frame.size > 0 then
+						local frameName = frame:GetName()
+						for s = 1, frame.size do
+							local button = _G[frameName .. "Item" .. s]
+							if button then button.rcLink = nil end
+						end
+					end
+				end
+				if origLearnOnUpdate then origLearnOnUpdate(self) end
 			end)
 		end
 
@@ -1304,7 +1435,7 @@ function RecipeColor.OnCompatEvent(rcFrame, event, arg1)
 	-- ElvUI
 	if event == "UNIT_SPELLCAST_SUCCEEDED" and isElvUI then
 		local learnTicker = RecipeColor.learnTicker
-		if learnTicker and RecipeColor.knownRecipeCount > 0 then
+		if learnTicker then
 			local E = ElvUI and ElvUI[1]
 			local B = E and E:GetModule("Bags")
 			if B and B.BagFrame and B.BagFrame:IsShown() then
@@ -1324,19 +1455,45 @@ function RecipeColor.OnCompatEvent(rcFrame, event, arg1)
 		end
 	end
 
-	-- DragonUI
-	if event == "UNIT_SPELLCAST_SUCCEEDED" and arg1 == "player" and isDragonUICombuctor then
+	-- DragonUI Bagster
+	if event == "UNIT_SPELLCAST_SUCCEEDED" and arg1 == "player" and isBagster then
 		local learnTicker = RecipeColor.learnTicker
-		if learnTicker and RecipeColor.knownRecipeCount > 0 then
+		if learnTicker then
 			local frameIdx = 1
 			while true do
-				local frame = _G["DragonUI_CombuctorFrame" .. frameIdx]
+				local frame = _G["DragonUI_BagsterFrame" .. frameIdx]
 				if not frame then break end
 				if frame:IsShown() then
 					learnTicker:Show()
 					break
 				end
 				frameIdx = frameIdx + 1
+			end
+		end
+	end
+
+	-- DragonUI default bags
+	if event == "UNIT_SPELLCAST_SUCCEEDED" and arg1 == "player" and isDragonUIBags then
+		local learnTicker = RecipeColor.learnTicker
+		if learnTicker then
+			for i = 1, (NUM_CONTAINER_FRAMES or 13) do
+				local frame = _G["ContainerFrame" .. i]
+				if frame and frame:IsShown() then
+					learnTicker:Show()
+					break
+				end
+			end
+		end
+	end
+
+	-- DragonUI New Era Bags
+	if event == "UNIT_SPELLCAST_SUCCEEDED" and arg1 == "player" and isNewEraBags then
+		local learnTicker = RecipeColor.learnTicker
+		if learnTicker then
+			local NE = _G["DragonUI_NewEra"]
+			local CB = NE and NE.combinedbag
+			if CB and CB.IsShown and CB:IsShown() then
+				learnTicker:Show()
 			end
 		end
 	end

@@ -384,11 +384,38 @@ local function RecipeColor_Initialize()
 		if frame and frame:IsShown() then
 			local size = frame.size
 			if not size or size == 0 then return end
-			local buttonIndex = size + 1 - slot
-			local itemButton  = _G[frame:GetName() .. "Item" .. buttonIndex]
-			if itemButton and RecipeColor.knownRecipeSlots and
-					RecipeColor.knownRecipeSlots[frame:GetID() .. ":" .. slot] then
-				SetItemButtonTextureVertexColor(itemButton, 0, 1, 0)
+			local bagID = frame:GetID()
+			local key   = bagID .. ":" .. slot
+			local _, _, locked = GetContainerItemInfo(bagID, slot)
+			if locked then
+				if RecipeColor.knownRecipeSlots and RecipeColor.knownRecipeSlots[key] then
+					RecipeColor.knownRecipeSlots[key] = nil
+					RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount - 1
+					if not frame._rcSavedSlots then frame._rcSavedSlots = {} end
+					frame._rcSavedSlots[slot] = true
+				end
+			else
+				local saved = frame._rcSavedSlots and frame._rcSavedSlots[slot]
+				if frame._rcSavedSlots then frame._rcSavedSlots[slot] = nil end
+				local key_known = RecipeColor.knownRecipeSlots and RecipeColor.knownRecipeSlots[key]
+				if key_known then
+					local buttonIndex = size + 1 - slot
+					local itemButton  = _G[frame:GetName() .. "Item" .. buttonIndex]
+					if itemButton then
+						SetItemButtonTextureVertexColor(itemButton, 0, 1, 0)
+					end
+				elseif saved then
+					local link = GetContainerItemLink(bagID, slot)
+					if link and IsRecipeItem(link) and IsKnownRecipe(bagID, slot) then
+						local buttonIndex = size + 1 - slot
+						local itemButton  = _G[frame:GetName() .. "Item" .. buttonIndex]
+						if itemButton then
+							SetItemButtonTextureVertexColor(itemButton, 0, 1, 0)
+						end
+						RecipeColor.knownRecipeSlots[key] = true
+						RecipeColor.knownRecipeCount = RecipeColor.knownRecipeCount + 1
+					end
+				end
 			end
 		end
 	end)
